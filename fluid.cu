@@ -6,8 +6,9 @@
 #include <stdlib.h>
 #include <string>
 #include <sys/time.h>
+#include <math.h>
 
-using namespace std ;
+using namespace std;
 //------------------------------------------------------------------------
 // GPGPU Helper Routines
 
@@ -421,20 +422,47 @@ float computeStableTimestep(const float *u, const float *v, const float *w,
     for(int j=0;j<nj;++j) {
       int offset = kstart+i*iskip+j*jskip;
       for(int k=0;k<nk;++k) {
-	const int indx = k+offset ;
-	// inviscid timestep
-	const float maxu2 = max(u[indx]*u[indx],max(v[indx]*v[indx],w[indx]*w[indx])) ;
-	const float af = sqrt(maxu2+eta) ;
-	const float maxev = sqrt(maxu2)+af ;
-	const float sum = maxev*(1./dx+1./dy+1./dz) ;
-	minDt=min(minDt,cfl/sum) ;
-	// viscous stable timestep
-	const float dist = min(dx,min(dy,dz)) ;
-	minDt=min<float>(minDt,0.2*cfl*dist*dist/nu) ;
+        const int indx = k+offset ;
+        // inviscid timestep
+        const float maxu2 = max(u[indx]*u[indx],max(v[indx]*v[indx],w[indx]*w[indx])) ;
+        const float af = sqrt(maxu2+eta) ;
+        const float maxev = sqrt(maxu2)+af ;
+        const float sum = maxev*(1./dx+1./dy+1./dz) ;
+        minDt=min(minDt,cfl/sum) ;
+        // viscous stable timestep
+        const float dist = min(dx,min(dy,dz)) ;
+        minDt=min<float>(minDt,0.2*cfl*dist*dist/nu) ;
       }
     }
   }
   return minDt ;
+}
+
+__global__
+void computeStableTimestep_kernel(float *scratch,
+          const float *u, const float *v, const float *w,
+			    float cfl, float eta, float nu,
+			    float dx, float dy, float dz,
+			    int ni, int nj, int nk, int kstart,
+			    int iskip, int jskip) {
+  // Threads are allocated to iterations as was done in initial conditions
+  float minDt = 1e30;
+  int i = blockIdx.x;
+  int k = threadIdx.x;
+  const int offset = kstart+i*iskip;
+  for (int j=0; j<nj;j++) {
+    const int indx = k+offset+j*jskip;
+    // inviscid timestep
+    const float maxu2 = max(u[indx]*u[indx],max(v[indx]*v[indx],w[indx]*w[indx]));
+    const float af = sqrt(maxu2+eta);
+    const float maxev = sqrt(maxu2)+af;
+    const float sum = maxev*(1./dx+1./dy+1./dz);
+    minDt=min(minDt,cfl/sum);
+    // viscous stable timestep
+    const float dist = min(dx,min(dy,dz));
+    minDt=min(minDt,0.2*cfl*dist*dist/nu);
+  }
+  scratch[i*nk+k] = minDt;
 }
 
 
@@ -469,16 +497,16 @@ void integrateKineticEnergy_kernel(float *scratch,
   double vol = dx*dy*dz ;
   double sum = 0 ;
   // Threads are allocated to iterations as was done in initial conditions
-  int i = blockIdx.x ;
-  int k = threadIdx.x ;
+  int i = blockIdx.x;
+  int k = threadIdx.x;
   for(int j=0;j<nj;++j) {
     int offset = kstart+i*iskip+j*jskip;
     const int indx = k+offset ;
     const float udotu = u[indx]*u[indx]+v[indx]*v[indx]+w[indx]*w[indx] ;
-    sum += 0.5*vol*udotu ;
+    sum += 0.5*vol*udotu;
   }
   // We store the sums over the k iteration into the scratch array
-  scratch[i*nk+k] = sum ;
+  scratch[i*nk+k] = sum;
 }
 
 __global__ 
@@ -514,6 +542,31 @@ void sumKernel(float *sum) {
   // Final step writes result from each thread block into sum array
   if(t==0)
     sum[b] = scratch[0]+scratch[1] ;
+}
+
+__global__
+void minKernel(float *minvals) {
+  int t = threadIdx.x;
+  int b = blockIdx.x;
+
+  __shared__ float scratch[1024];
+  scratch[t] = minvals[b*blockDim.x+t];
+
+  int nthreads = blockDim.x;
+  int offset = nthreads;
+
+  while(offset > 2) {
+    // compute offset to paired number
+    offset >>= 1; // offset = offset / 2
+    __syncthreads();
+
+    if(t < offset) // if our thread is writing to memory ,write sum
+      scratch[t] = min(scratch[t], scratch[t+offset]);
+  }
+  __syncthreads();
+
+  if(t==0)
+    minvals[b] = min(scratch[0],scratch[1]);
 }
 
 
@@ -680,35 +733,39 @@ int main(int ac, char *av[]) {
   copy_gpu_to_cpu(v_cuda, &v[0],allocsize, "v");
   copy_gpu_to_cpu(w_cuda, &w[0],allocsize, "v");
 
-
-  // Find initial integrated fluid kinetic energy to monitor solution 
-  //  float kprev = integrateKineticEnergy(&u[0], &v[0], &w[0], dx, dy, dz,
-  //				       ni,  nj,  nk, kstart, iskip, jskip) ;
   integrateKineticEnergy_kernel<<<ni,nk>>>(scratch_cuda,u_cuda, v_cuda, w_cuda, dx, dy, dz,
 					   ni,  nj,  nk, kstart, iskip, jskip) ;
-  int ntot = ni*nk ;
-  int nblocks = ntot>>10 ;
-  sumKernel<<<nblocks,1024>>>(scratch_cuda) ;
-  vector<float> tmp(nblocks) ;
-  copy_gpu_to_cpu(scratch_cuda,&tmp[0],nblocks,"sum") ;
-  float kprev = tmp[0] ;
+  int ntot = ni*nk;
+  int nblocks = ntot>>10;
+  sumKernel<<<nblocks,1024>>>(scratch_cuda);
+  vector<float> tmp(nblocks);
+  copy_gpu_to_cpu(scratch_cuda,&tmp[0],nblocks,"sum");
+  float kprev = tmp[0];
   for(int i=1;i<nblocks;++i) 
-    kprev += tmp[i] ;
+    kprev += tmp[i];
   
   // We use this scaling parameter so we can plot normalized kinetic energy
-  float kscale = 1./kprev ;
+  float kscale = 1./kprev;
 
 
   // Starting simulation time
-  float simTime = 0 ;
-  int iter = 0 ;
+  float simTime = 0;
+  int iter = 0;
 
-  float dt = computeStableTimestep(&u[0], &v[0], &w[0],
+  computeStableTimestep_kernel<<<ni,nk>>>(scratch_cuda, u_cuda, v_cuda, w_cuda,
 				   cflmax, eta, nu, dx, dy, dz,
-				   ni, nj, nk, kstart, iskip, jskip) ;
+				   ni, nj, nk, kstart, iskip, jskip);
+  minKernel<<<nblocks,1024>>>(scratch_cuda);
+  copy_gpu_to_cpu(scratch_cuda,&tmp[0],nblocks,"minDt");
+  float dt = tmp[0];
+  for(int i=1;i<nblocks;++i) {
+    dt = min(dt, tmp[i]);
+  }
 
   // begin Runge-Kutta 3rd Order Time Integration
   while(simTime < stopTime) {
+
+    break;
 
     // copy data to the ghost cells to implement periodic boundary conditions
     copyPeriodic(&p[0],&u[0],&v[0],&w[0],

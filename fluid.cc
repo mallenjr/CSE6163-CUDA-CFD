@@ -545,6 +545,8 @@ int main(int ac, char *av[]) {
   // begin Runge-Kutta 3rd Order Time Integration
   while(simTime < stopTime) {
 
+    break;
+
     // copy data to the ghost cells to implement periodic boundary conditions
     copyPeriodic(&p[0],&u[0],&v[0],&w[0],
 		 ni, nj, nk, kstart, iskip, jskip) ;
