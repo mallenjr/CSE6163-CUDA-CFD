@@ -1,5 +1,5 @@
 
-NVCC=nvcc -O3 -arch sm_35
+NVCC=nvcc -O3 -arch sm_89
 #NVCC=nvcc -O3 
 
 deviceinfo: deviceinfo.cu

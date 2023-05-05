@@ -131,11 +131,11 @@ void zeroResidual(float *presid, float *uresid, float *vresid, float *wresid,
     for(int j=-1;j<nj+1;++j) {
       int offset = kstart+i*iskip+j*jskip;
       for(int k=-1;k<nk+1;++k) {
-	const int indx = k+offset ;
-	presid[indx] = 0 ;
-	uresid[indx] = 0 ;
-	vresid[indx] = 0 ;
-	wresid[indx] = 0 ;
+        const int indx = k+offset ;
+        presid[indx] = 0 ;
+        uresid[indx] = 0 ;
+        vresid[indx] = 0 ;
+        wresid[indx] = 0 ;
       }
     }
   }
@@ -545,8 +545,6 @@ int main(int ac, char *av[]) {
   // begin Runge-Kutta 3rd Order Time Integration
   while(simTime < stopTime) {
 
-    break;
-
     // copy data to the ghost cells to implement periodic boundary conditions
     copyPeriodic(&p[0],&u[0],&v[0],&w[0],
 		 ni, nj, nk, kstart, iskip, jskip) ;
@@ -637,8 +635,10 @@ int main(int ac, char *av[]) {
     ke_file << simTime << " " << kscale*knext << " " << -kscale*(knext-kprev)/dt << endl;
     // Every 128 iterations report the state so we can observe progress of
     // the simulation
-    if((iter&0x7f) == 0)
+    if((iter&0x7f) == 0) {
       cout << "ke: " << simTime << ' ' << kscale*knext << endl ;
+      break;
+    }
     // keep track of the change in kinetic energy over timesteps so we can plot
     // the derivative of the kinetic energy with time.
     kprev = knext ;
