@@ -202,7 +202,7 @@ void zeroResidual_kernel(float *presid, float *uresid, float *vresid, float *wre
 }
 
 __global__
-void computeResidual_kernel1(float *presid, float *uresid, float *vresid, float *wresid,
+void computeResidual_i_kernel(float *presid, float *uresid, float *vresid, float *wresid,
 		     const float *p,
 		     const float *u, const float *v, const float *w,
 		     float eta, float nu, float dx, float dy, float dz,
@@ -271,7 +271,7 @@ void computeResidual_kernel1(float *presid, float *uresid, float *vresid, float 
 }
 
 __global__
-void computeResidual_kernel2(float *presid, float *uresid, float *vresid, float *wresid,
+void computeResidual_j_kernel(float *presid, float *uresid, float *vresid, float *wresid,
 		     const float *p,
 		     const float *u, const float *v, const float *w,
 		     float eta, float nu, float dx, float dy, float dz,
@@ -344,7 +344,7 @@ void computeResidual_kernel2(float *presid, float *uresid, float *vresid, float 
 // Compute the residue which is represent the computed rate of change for the
 // pressure and the three components of the velocity vector denoted (u,v,w)
 __global__
-void computeResidual_kernel3(float *presid, float *uresid, float *vresid, float *wresid,
+void computeResidual_k_kernel(float *presid, float *uresid, float *vresid, float *wresid,
 		     const float *p,
 		     const float *u, const float *v, const float *w,
 		     float eta, float nu, float dx, float dy, float dz,
@@ -733,15 +733,15 @@ int main(int ac, char *av[]) {
     
     // Compute the residual, these will be used to compute the rates of change
     // of pressure and velocity components
-    computeResidual_kernel1<<<ni, nk>>>(presid_cuda, uresid_cuda, vresid_cuda, wresid_cuda,
+    computeResidual_i_kernel<<<ni, nk>>>(presid_cuda, uresid_cuda, vresid_cuda, wresid_cuda,
 		    p_cuda, u_cuda, v_cuda, w_cuda,
 		    eta, nu, dx, dy, dz,
 		    ni, nj, nk, kstart, iskip, jskip);
-    computeResidual_kernel2<<<ni, nk>>>(presid_cuda, uresid_cuda, vresid_cuda, wresid_cuda,
+    computeResidual_j_kernel<<<ni, nk>>>(presid_cuda, uresid_cuda, vresid_cuda, wresid_cuda,
 		    p_cuda, u_cuda, v_cuda, w_cuda,
 		    eta, nu, dx, dy, dz,
 		    ni, nj, nk, kstart, iskip, jskip);
-    computeResidual_kernel3<<<ni, nk>>>(presid_cuda, uresid_cuda, vresid_cuda, wresid_cuda,
+    computeResidual_k_kernel<<<ni, nk>>>(presid_cuda, uresid_cuda, vresid_cuda, wresid_cuda,
 		    p_cuda, u_cuda, v_cuda, w_cuda,
 		    eta, nu, dx, dy, dz,
 		    ni, nj, nk, kstart, iskip, jskip);
@@ -769,15 +769,15 @@ int main(int ac, char *av[]) {
 		 ni, nj, nk, kstart, iskip, jskip);
     zeroResidual_kernel<<<ni + 2, nk + 2>>>(presid_cuda, uresid_cuda, vresid_cuda, wresid_cuda,
 		 ni, nj, nk , kstart, iskip, jskip);
-    computeResidual_kernel1<<<ni, nk>>>(presid_cuda, uresid_cuda, vresid_cuda, wresid_cuda,
+    computeResidual_i_kernel<<<ni, nk>>>(presid_cuda, uresid_cuda, vresid_cuda, wresid_cuda,
 		    pnext_cuda, unext_cuda, vnext_cuda, wnext_cuda,
 		    eta, nu, dx, dy, dz,
 		    ni, nj, nk, kstart, iskip, jskip);
-    computeResidual_kernel2<<<ni, nk>>>(presid_cuda, uresid_cuda, vresid_cuda, wresid_cuda,
+    computeResidual_j_kernel<<<ni, nk>>>(presid_cuda, uresid_cuda, vresid_cuda, wresid_cuda,
 		    pnext_cuda, unext_cuda, vnext_cuda, wnext_cuda,
 		    eta, nu, dx, dy, dz,
 		    ni, nj, nk, kstart, iskip, jskip);
-    computeResidual_kernel3<<<ni, nk>>>(presid_cuda, uresid_cuda, vresid_cuda, wresid_cuda,
+    computeResidual_k_kernel<<<ni, nk>>>(presid_cuda, uresid_cuda, vresid_cuda, wresid_cuda,
 		    pnext_cuda, unext_cuda, vnext_cuda, wnext_cuda,
 		    eta, nu, dx, dy, dz,
 		    ni, nj, nk, kstart, iskip, jskip);
@@ -800,15 +800,15 @@ int main(int ac, char *av[]) {
     
     zeroResidual_kernel<<<ni + 2, nk + 2>>>(presid_cuda, uresid_cuda, vresid_cuda, wresid_cuda,
 		 ni, nj, nk , kstart, iskip, jskip);
-    computeResidual_kernel1<<<ni, nk>>>(presid_cuda, uresid_cuda, vresid_cuda, wresid_cuda,
+    computeResidual_i_kernel<<<ni, nk>>>(presid_cuda, uresid_cuda, vresid_cuda, wresid_cuda,
 		    pnext_cuda, unext_cuda, vnext_cuda, wnext_cuda,
 		    eta, nu, dx, dy, dz,
 		    ni, nj, nk, kstart, iskip, jskip);
-    computeResidual_kernel2<<<ni, nk>>>(presid_cuda, uresid_cuda, vresid_cuda, wresid_cuda,
+    computeResidual_j_kernel<<<ni, nk>>>(presid_cuda, uresid_cuda, vresid_cuda, wresid_cuda,
 		    pnext_cuda, unext_cuda, vnext_cuda, wnext_cuda,
 		    eta, nu, dx, dy, dz,
 		    ni, nj, nk, kstart, iskip, jskip);
-    computeResidual_kernel3<<<ni, nk>>>(presid_cuda, uresid_cuda, vresid_cuda, wresid_cuda,
+    computeResidual_k_kernel<<<ni, nk>>>(presid_cuda, uresid_cuda, vresid_cuda, wresid_cuda,
 		    pnext_cuda, unext_cuda, vnext_cuda, wnext_cuda,
 		    eta, nu, dx, dy, dz,
 		    ni, nj, nk, kstart, iskip, jskip);
